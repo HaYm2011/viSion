@@ -1,0 +1,30 @@
+{
+    "camera_id": 0,
+    "track_objects": ["keys", "wallet", "phone", "glasses"],
+    "zones": [
+        {
+            "id": "counter",
+            "description": "Kitchen Counter",
+            "bbox": [0, 0, 300, 300]
+        },
+        {
+            "id": "desk",
+            "description": "Work Desk",
+            "bbox": [300, 0, 600, 300]
+        },
+        {
+            "id": "entryway",
+            "description": "Entryway Bowl",
+            "bbox": [0, 300, 300, 600]
+        }
+    ],
+    "models": {
+        "vision": "yolov8s-world.pt",
+        "stt": "base.en",
+        "tts": "en_US-lessac-medium"
+    },
+    "storage": {
+        "db_path": "data/memory.db",
+        "crop_dir": "data/crops"
+    }
+}

@@ -1,0 +1,9 @@
+ultralytics
+faster-whisper
+piper-tts
+openwakeword
+sqlite-vec
+fastapi
+uvicorn
+pydantic
+opencv-python-headless
