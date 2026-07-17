@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>viSion // Overview</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="ambient-bg"></div>
+
+    <nav class="navbar glass">
+        <a href="index.html" class="logo">viSion<span class="dot">.</span></a>
+        <ul class="nav-links">
+            <li><a href="index.html" class="active">Overview</a></li>
+            <li><a href="results.html">Results</a></li>
+        </ul>
+    </nav>
+
+    <header id="overview" class="hero section-anchor">
+        <div class="hero-content fade-up">
+            <div class="badge">Local-First AI System</div>
+            <h1 class="title">Meet <span class="gradient-text">viSion</span></h1>
+            <h2 class="subtitle type-writer" id="type-text"></h2>
+            <p class="description">
+                Object permanence for the real world. viSion maintains a real-time spatial memory of your home, anchoring state transitions to physical zones. We eliminate the friction of lost items and temporal discontinuity without sacrificing your privacy.
+            </p>
+            <div class="btn-group">
+                <a href="#persona" class="btn btn-primary">System Persona</a>
+                <a href="#architecture" class="btn btn-secondary">View Architecture</a>
+            </div>
+        </div>
+
+        <div class="hero-visual floating fade-up" style="animation-delay: 0.2s;">
+            <div class="glass-card tracking-ui">
+                <div class="ui-header">
+                    <div class="status-dot pulsing"></div>
+                    <span class="mono-text">TRACKING_ACTIVE</span>
+                </div>
+                <div class="ui-body">
+                    <div class="target-info">
+                        <h3>Target: <span class="highlight">Keys</span></h3>
+                        <p class="mono-text text-muted">STATE: TRANSITION_DETECTED</p>
+                        <p class="mono-text text-muted">ZONE: SECTOR_4 [COUNTER]</p>
+                        <p class="mono-text text-muted">TIME: <span id="live-time">14:32:04</span></p>
+                    </div>
+                    <div class="visual-placeholder">
+                        <div class="scan-line-horizontal"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <section class="container section-anchor">
+        <div class="section-header fade-up">
+            <h2>Core Capabilities</h2>
+            <p class="text-muted">A modern memory layer for the physical world.</p>
+        </div>
+
+        <div class="card-grid three-col">
+            <div class="glass-card hover-tilt fade-up">
+                <div class="card-icon">⚡</div>
+                <h3>State Logic</h3>
+                <p>Naive AI captions every frame. viSion tracks state shifts. “Keys appeared at 14:32” overwrites previous location vectors with minimal compute and stronger certainty.</p>
+            </div>
+            <div class="glass-card hover-tilt fade-up" style="animation-delay: 0.1s;">
+                <div class="card-icon">🎯</div>
+                <h3>Zone Anchors</h3>
+                <p>Raw pixel coordinates fluctuate. Pre-labeled spatial anchors such as [DESK_DRAWER] keep memory stable, queryable, and grounded in real-world context.</p>
+            </div>
+            <div class="glass-card hover-tilt fade-up" style="animation-delay: 0.2s;">
+                <div class="card-icon">📸</div>
+                <h3>Visual Proof</h3>
+                <p>LLM hallucinations are unacceptable. Each answer can be traced to a cropped frame captured at the exact moment of transition.</p>
+            </div>
+        </div>
+    </section>
+
+    <section id="persona" class="container section-anchor">
+        <div class="section-header fade-up">
+            <h2>System Persona</h2>
+            <p class="text-muted">An empathetic, proactive companion that understands routines rather than just pixels.</p>
+        </div>
+
+        <div class="card-grid two-col">
+            <div class="glass-card hover-tilt fade-up">
+                <div class="card-icon">🧠</div>
+                <h3>Identity & Intent</h3>
+                <p>Designed as a calm, helpful presence that reduces friction, anticipates needs, and keeps the user informed without overwhelming them.</p>
+                <ul class="clean-list">
+                    <li>Proactive reminders when routines change</li>
+                    <li>Grounded confidence over speculative replies</li>
+                    <li>Context aware and privacy respecting</li>
+                </ul>
+            </div>
+            <div class="glass-card hover-tilt fade-up" style="animation-delay: 0.1s;">
+                <div class="card-icon">🌐</div>
+                <h3>Ambient Companion</h3>
+                <p>By focusing on semantic memory and spatial context, viSion turns passive observation into a trusted layer of everyday assistance.</p>
+                <div class="metric-row">
+                    <span class="metric-pill">Local-first</span>
+                    <span class="metric-pill">Adaptive</span>
+                    <span class="metric-pill">Transparent</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="architecture" class="container section-anchor">
+        <div class="section-header fade-up">
+            <h2>Architecture Overview</h2>
+            <p class="text-muted">A simple path from sensor input to reliable, human-readable memory.</p>
+        </div>
+
+        <div class="card-grid two-col">
+            <div class="glass-card hover-tilt fade-up">
+                <div class="pipeline-container">
+                    <div class="pipeline-node">
+                        <div class="node-badge">I/O</div>
+                        <h3>Optical Sensor</h3>
+                        <p>Camera input is gated by motion and scene context to preserve efficiency.</p>
+                        <div class="progress-bar" style="--progress: 82%"><div class="progress-fill"></div></div>
+                    </div>
+                    <div class="pipeline-arrow">↓</div>
+                    <div class="pipeline-node">
+                        <div class="node-badge">NN</div>
+                        <h3>Inference Engine</h3>
+                        <p>Object detection and captioning produce lightweight evidence about what changed.</p>
+                        <div class="progress-bar" style="--progress: 91%"><div class="progress-fill"></div></div>
+                    </div>
+                    <div class="pipeline-arrow">↓</div>
+                    <div class="pipeline-node">
+                        <div class="node-badge">MEM</div>
+                        <h3>Spatial Memory</h3>
+                        <p>Detected state changes are stored against semantic zones for future recall.</p>
+                        <div class="progress-bar" style="--progress: 76%"><div class="progress-fill"></div></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="glass-card hover-tilt fade-up" style="animation-delay: 0.1s;">
+                <div class="card-icon">🛠️</div>
+                <h3>Why It Scales</h3>
+                <p>The system is intentionally conservative: it compresses uncertainty, keeps memory anchored to meaningful places, and makes retrieval auditable.</p>
+                <ul class="clean-list">
+                    <li>Less data churn from noisy coordinates</li>
+                    <li>Fast recall around zones instead of pixels</li>
+                    <li>Human-readable state timelines</li>
+                </ul>
+            </div>
+        </div>
+    </section>
+
+    <section id="privacy" class="container section-anchor">
+        <div class="section-header fade-up">
+            <h2>Privacy & Data</h2>
+            <p class="text-muted">The promise of privacy stays central to the experience.</p>
+        </div>
+
+        <div class="card-grid two-col">
+            <div class="glass-card hover-tilt fade-up">
+                <div class="card-icon">🔒</div>
+                <h3>Private by Design</h3>
+                <p>Local inference, selective storage, and visual evidence make the system easier to trust than cloud-first alternatives.</p>
+            </div>
+            <div class="glass-card hover-tilt fade-up" style="animation-delay: 0.1s;">
+                <div class="card-icon">📈</div>
+                <h3>Roadmap</h3>
+                <ul class="clean-list">
+                    <li>Phase 1: object memory and habit logging</li>
+                    <li>Phase 2: richer dialogue and proactive assistance</li>
+                    <li>Phase 3: deeper personalization and secure sharing</li>
+                </ul>
+            </div>
+        </div>
+    </section>
+
+    <footer class="container section-anchor">
+        <div class="section-header fade-up">
+            <a href="results.html" class="btn btn-secondary">Explore Results</a>
+        </div>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+</html>
