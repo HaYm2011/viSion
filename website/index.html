@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>viSion // Object Memory Ambient Assistant</title>
+    <link href="https://v1.fontapi.ir/css/SFProDisplay" rel="stylesheet" />
+    <link href="https://v1.fontapi.ir/css/SFMono" rel="stylesheet" />
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <div id="loader">
+      <div class="logo">viSion<span class="dot">.</span></div>
+    </div>
+    <div class="ambient-bg">
+      <div class="blob blob1"></div>
+      <div class="blob blob2"></div>
+      <div class="blob blob3"></div>
+      <div class="blob blob4"></div>
+      <div class="blob blob5"></div>
+      <div class="blob blob6"></div>
+      <div class="blob blob7"></div>
+      <div class="blob blob8"></div>
+    </div>
+
+    <nav class="navbar glass">
+      <a href="index.html" class="logo">viSion<span class="dot">.</span></a>
+      <ul class="nav-links">
+        <li><a href="index.html" class="active">Overview</a></li>
+      </ul>
+      <div class="theme-switch-wrapper">
+        <span id="theme-mode-text" class="text-muted"></span>
+        <label class="theme-switch" for="checkbox">
+          <input type="checkbox" id="checkbox" />
+          <div class="slider round"></div>
+        </label>
+      </div>
+    </nav>
+
+    <header id="overview" class="hero section-anchor">
+      <div class="hero-content fade-up">
+        <h2 class="subtitle" id="pre-hero-text"></h2>
+        <h1 class="title" id="hero-title">viSion<span class="dot">.</span></h1>
+        <h2 class="subtitle" id="type-text">
+          An Object Memory Ambient Assistant
+        </h2>
+        <p class="description">
+          An ambient AI assistant designed to track the location of your
+          everyday objects, log habits, and answer queries through voice
+          interaction.
+        </p>
+      </div>
+    </header>
+
+    <main class="container">
+      <section id="architecture" class="section-anchor">
+        <div class="section-header fade-up">
+          <h2>Core Capabilities</h2>
+        </div>
+        <div class="card-grid three-col">
+          <div class="glass-card hover-tilt fade-up">
+            <h3>Object Permanence</h3>
+            <p>
+              viSion tracks object position changes. For example: "Keys appeared
+              at 2:32 PM on the counter".
+            </p>
+          </div>
+          <div
+            class="glass-card hover-tilt fade-up"
+            style="animation-delay: 0.1s">
+            <h3>Habit Logging</h3>
+            <p>
+              Automatically log your habits and routines, helping you stay on
+              track with your goals.
+            </p>
+          </div>
+          <div
+            class="glass-card hover-tilt fade-up"
+            style="animation-delay: 0.2s">
+            <h3>Voice Interaction</h3>
+            <p>
+              Ask questions like "Where is my wallet?" and get instant answers.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section id="voice-demo" class="section-anchor">
+        <div class="section-header fade-up">
+          <h2>Voice Interaction Demo</h2>
+        </div>
+        <div class="voice-demo-container glass fade-up">
+          <div class="voice-indicator"></div>
+          <div class="abstract-shape shape1"></div>
+          <div class="abstract-shape shape2"></div>
+          <div class="abstract-shape shape3"></div>
+          <p id="transcription-text" class="mono-text"></p>
+        </div>
+      </section>
+
+      <section id="beyond-tracking" class="section-anchor">
+        <div class="section-header fade-up">
+          <h2>Beyond Object Tracking</h2>
+        </div>
+        <div class="card-grid two-col">
+          <div class="glass-card hover-tilt fade-up">
+            <h3>Diet & Nutrition</h3>
+            <p>
+              Keep a visual diary of your meals. Get insights into your eating
+              habits and nutritional intake.
+            </p>
+          </div>
+          <div
+            class="glass-card hover-tilt fade-up"
+            style="animation-delay: 0.1s">
+            <h3>Smart Reminders</h3>
+            <p>
+              Set reminders for medication, appointments, or any other important
+              event, and viSion will remember and remind you.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section id="models" class="section-anchor">
+        <div class="section-header fade-up">
+          <h2>Models</h2>
+        </div>
+        <div class="card-grid three-col">
+          <div class="glass-card hover-tilt fade-up">
+            <h3>Detection</h3>
+            <p><code>YOLO</code></p>
+          </div>
+          <div
+            class="glass-card hover-tilt fade-up"
+            style="animation-delay: 0.1s">
+            <h3>STT/TTS</h3>
+            <p><code>faster-whisper</code> and <code>Piper</code></p>
+          </div>
+        </div>
+      </section>
+
+      <section id="privacy" class="section-anchor">
+        <div class="section-header fade-up">
+          <h2>Privacy</h2>
+        </div>
+        <div class="glass-card fade-up">
+          <p>
+            <code>APIs</code> are only used for extra information related to
+            objects. We run all image detection locally on-device.
+          </p>
+        </div>
+      </section>
+    </main>
+
+    <footer class="container section-anchor">
+      <div class="section-header fade-up">
+        <p class="text-muted">Built with privacy in mind.</p>
+        <p class="text-muted" style="margin-top: 1rem">
+          made by team MARS - Mohit, Ahan, Rachit, Swastik
+        </p>
+      </div>
+    </footer>
+
+    <script src="script.js"></script>
+  </body>
+</html>
