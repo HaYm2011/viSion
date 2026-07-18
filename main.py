@@ -1,16 +1,20 @@
 """
 viSion — single-file ambient object memory assistant
 =====================================================
-pip install ultralytics fastapi "uvicorn[standard]" opencv-python faster-whisper pyttsx3 sounddevice numpy scipy
+pip install ultralytics fastapi "uvicorn[standard]" opencv-python faster-whisper pyttsx3 sounddevice numpy scipy python-dotenv requests
 
 Run:
     python main.py
 
 Then open http://localhost:8000 in Chrome.
-Voice: hold the button in the browser (Web Speech API, zero install).
+Voice: hold the button in the browser (Web Speech API, zero install), or say
+"hey vision" hands-free once the server-side mic loop is listening.
+
+General knowledge: copy .env.example to .env and set GEMINI_API_KEY to route
+any question that isn't about a tracked object to Gemini instead.
 """
 
-import base64, json, math, os, queue, re, threading, time
+import base64, json, math, os, queue, re, threading, time, wave
 from collections import defaultdict, deque
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -19,24 +23,31 @@ from pathlib import Path
 import cv2
 import numpy as np
 import pyttsx3
+import requests
 import sounddevice as sd
 import uvicorn
+from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
 from faster_whisper import WhisperModel
+from scipy.signal import resample
 from ultralytics import YOLOE
+
+load_dotenv()
 
 # ══════════════════════════════════════════════════════════════════════
 #  CONFIG — tweak these, nothing else
 # ══════════════════════════════════════════════════════════════════════
-CAM_INDEX     = 2          # 0 = default webcam
+CAM_INDEX     = 0          # 0 = default webcam
 INFER_EVERY   = 4          # run YOLOE every Nth frame; display runs every frame
 CONF          = 0.22       # detection confidence threshold
 DEBOUNCE      = 3          # detections before we trust a zone assignment
 MISSING_AFTER = 10.0       # seconds unseen → mark missing
 WAKE_PHRASES  = ["hey vision", "hey vishen", "hey vison", "ok vision"]
 WHISPER_MODEL = os.getenv("VISION_WHISPER", "base.en")
-MODEL         = os.getenv("VISION_MODEL", "yoloe-11s-seg.pt")
+MODEL         = os.getenv("VISION_MODEL", "yoloe-11m-seg.pt")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "AIzaSyDEUgyq5ruZz8Tq7-XCOi0qiar_vv_uxgc")
+GEMINI_MODEL   = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 
 # Objects to track — open-vocab (YOLOE), so this can be broad.
 TRACKED = [
@@ -83,7 +94,9 @@ ALIASES: dict[str, list[str]] = {
 
 # Surfaces/places YOLOE also looks for each frame — an object's "zone" is
 # whichever detected place box contains it. No manual zone rectangles.
-PLACES = ["desk", "table", "shelf", "bed", "couch", "chair", "floor", "cabinet"]
+PLACES = ["desk", "table", "shelf", "bed", "couch", "chair", "floor", "cabinet", "drawer"]
+CONTAINERS = {"drawer", "cabinet"}   # "in" not "on"; going missing here means stored, not lost
+ACTORS = ["person"]                  # detected but not a place/object — used to spot held items
 
 CROPS_DIR = Path("crops"); CROPS_DIR.mkdir(exist_ok=True)
 
@@ -97,6 +110,8 @@ _jpeg:   list             = [None]      # latest camera frame as JPEG bytes
 _pending: dict[str, deque] = defaultdict(lambda: deque(maxlen=DEBOUNCE))
 _zones_now: list          = [[]]        # currently-detected place names (shared with /state)
 _voice:  dict             = {"listening": False, "heard": "", "say": "", "hit": None}
+_speak_queue: queue.Queue = queue.Queue()   # text handed to the TTS thread — Q&A answers + event narration
+_tts_busy = threading.Event()               # set while audio is actually playing, so the mic ignores its own echo
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -107,19 +122,70 @@ def _ago(iso: str) -> str:
     if secs < 3600: return f"{int(secs // 60)} min ago"
     return f"{int(secs // 3600)} hr ago"
 
+def _iou(a: tuple, b: tuple) -> float:
+    ax1, ay1, ax2, ay2 = a
+    bx1, by1, bx2, by2 = b
+    iw = max(0, min(ax2, bx2) - max(ax1, bx1))
+    ih = max(0, min(ay2, by2) - max(ay1, by1))
+    inter = iw * ih
+    if inter == 0:
+        return 0.0
+    union = (ax2 - ax1) * (ay2 - ay1) + (bx2 - bx1) * (by2 - by1) - inter
+    return inter / union if union > 0 else 0.0
+
+def _dedupe_overlaps(dets: list, iou_thresh: float = 0.5) -> list:
+    """A single physical object can get proposed as several different labels
+    at once (worse from odd camera angles) — keep only the most confident."""
+    kept: list = []
+    for d in sorted(dets, key=lambda d: -d[1]):
+        if not any(_iou(d[2:], k[2:]) > iou_thresh for k in kept):
+            kept.append(d)
+    return kept
+
+def _is_held(box: tuple, person_boxes: list, thresh: float = 0.35) -> bool:
+    x1, y1, x2, y2 = box
+    obj_area = max(0, x2 - x1) * max(0, y2 - y1)
+    if obj_area == 0:
+        return False
+    for p in person_boxes:
+        iw = max(0, min(x2, p[2]) - max(x1, p[0]))
+        ih = max(0, min(y2, p[3]) - max(y1, p[1]))
+        if (iw * ih) / obj_area > thresh:
+            return True
+    return False
+
+def _zone_base(zone: str) -> str:
+    """Strip a numbering suffix like "drawer 2" -> "drawer" for CONTAINERS checks."""
+    head, _, tail = zone.rpartition(" ")
+    return head if head and tail.isdigit() else zone
+
+def _zone_phrase(zone: str) -> str:
+    if zone == "your hand":
+        return "in your hand"
+    return f"{'in' if _zone_base(zone) in CONTAINERS else 'on'} the {zone}"
+
 # ══════════════════════════════════════════════════════════════════════
 #  VISION LOOP
 # ══════════════════════════════════════════════════════════════════════
 def _vision_loop():
     print(f"[vision] loading {MODEL} …")
     model = YOLOE(MODEL)
-    all_classes = PLACES + TRACKED
+    all_classes = PLACES + TRACKED + ACTORS
     model.set_classes(all_classes, model.get_text_pe(all_classes))
-    places_set, tracked_set = set(PLACES), set(TRACKED)
+    places_set, tracked_set, actors_set = set(PLACES), set(TRACKED), set(ACTORS)
     print(f"[vision] ready — places: {', '.join(PLACES)}")
     print(f"[vision] ready — tracking: {', '.join(TRACKED)}")
 
     cap = cv2.VideoCapture(CAM_INDEX)
+    if not cap.isOpened():
+        print(f"[vision] CAM_INDEX={CAM_INDEX} unavailable, scanning for a camera …")
+        for i in range(5):
+            cap = cv2.VideoCapture(i)
+            if cap.isOpened():
+                print(f"[vision] using camera index {i} instead")
+                break
+        else:
+            print("[vision] no camera found — vision loop idle")
     cap.set(cv2.CAP_PROP_FRAME_WIDTH,  1280)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT,  720)
 
@@ -138,15 +204,35 @@ def _vision_loop():
             results   = model.predict(frame, conf=CONF, verbose=False)[0]
             last_boxes = results.boxes
 
-            place_boxes: list[tuple[str, int, int, int, int]] = []
+            raw_places: dict[str, list[tuple[int, int, int, int]]] = defaultdict(list)
             object_dets: list[tuple[str, float, int, int, int, int]] = []
+            person_boxes: list[tuple[int, int, int, int]] = []
             for box in last_boxes:
                 label = model.names[int(box.cls)]
                 x1, y1, x2, y2 = map(int, box.xyxy[0])
                 if label in places_set:
-                    place_boxes.append((label, x1, y1, x2, y2))
+                    raw_places[label].append((x1, y1, x2, y2))
                 elif label in tracked_set:
                     object_dets.append((label, float(box.conf), x1, y1, x2, y2))
+                elif label in actors_set:
+                    person_boxes.append((x1, y1, x2, y2))
+            object_dets = _dedupe_overlaps(object_dets)
+
+            # Number same-label places left-to-right (e.g. "drawer 1", "drawer 2")
+            # so multiple instances stay distinguishable. No persistent tracker
+            # needed — furniture doesn't move, so spatial order is stable.
+            place_boxes: list[tuple[str, int, int, int, int]] = []
+            for label, boxes in raw_places.items():
+                uniq: list[tuple[int, int, int, int]] = []
+                for b in boxes:                       # collapse duplicate proposals
+                    if not any(_iou(b, u) > 0.6 for u in uniq):
+                        uniq.append(b)
+                if len(uniq) > 1:
+                    uniq.sort(key=lambda b: b[0])      # left → right by x1
+                    for i, b in enumerate(uniq, start=1):
+                        place_boxes.append((f"{label} {i}", *b))
+                else:
+                    place_boxes.append((label, *uniq[0]))
             last_places = place_boxes
 
             with _lock:
@@ -154,15 +240,18 @@ def _vision_loop():
 
             seen_labels: set[str] = set()
             for label, conf, x1, y1, x2, y2 in object_dets:
-                # Use bottom-centre as the "resting point"
-                cx, cy = (x1 + x2) // 2, y2
-                zone, best_area = None, None
-                for name, px1, py1, px2, py2 in place_boxes:
-                    if px1 <= cx <= px2 and py1 <= cy <= py2:
-                        area = (px2 - px1) * (py2 - py1)
-                        if best_area is None or area < best_area:
-                            best_area, zone = area, name
-                zone = zone or "floor"   # no surface detected under it → assume floor
+                if _is_held((x1, y1, x2, y2), person_boxes):
+                    zone = "your hand"
+                else:
+                    # Use bottom-centre as the "resting point"
+                    cx, cy = (x1 + x2) // 2, y2
+                    zone, best_area = None, None
+                    for name, px1, py1, px2, py2 in place_boxes:
+                        if px1 <= cx <= px2 and py1 <= cy <= py2:
+                            area = (px2 - px1) * (py2 - py1)
+                            if best_area is None or area < best_area:
+                                best_area, zone = area, name
+                    zone = zone or "floor"   # no surface detected under it → assume floor
                 seen_labels.add(label)
 
                 # Debounce: only trust a zone once N consecutive reads agree
@@ -192,20 +281,27 @@ def _vision_loop():
                     _events.append({"object": label, "event": event, "zone": zone,
                                     "conf": round(conf, 3), "at": _now()})
                 print(f"[event] {label:16s} {event:10s} → {zone}")
+                verb = "just appeared" if event == "appeared" else "moved"
+                _speak_queue.put(f"Your {label} {verb} {_zone_phrase(zone)}.")
 
-            # Flip unseen objects to missing after timeout, but KEEP their zone
+            # Flip unseen objects to missing (or "stored", if last seen in a
+            # container) after timeout, but KEEP their zone.
             with _lock:
                 for label, s in _state.items():
-                    if label in seen_labels or s["status"] == "missing":
+                    if label in seen_labels or s["status"] in ("missing", "stored"):
                         continue
                     age = (datetime.now(timezone.utc)
                            - datetime.fromisoformat(s["seen_at"])).total_seconds()
                     if age > MISSING_AFTER:
-                        s["status"] = "missing"
-                        _events.append({"object": label, "event": "disappeared",
+                        stored = _zone_base(s["zone"]) in CONTAINERS
+                        s["status"] = "stored" if stored else "missing"
+                        event = "stored" if stored else "disappeared"
+                        _events.append({"object": label, "event": event,
                                         "zone": s["zone"], "conf": s["conf"],
                                         "at": _now()})
-                        print(f"[event] {label:16s} disappeared  (was on {s['zone']})")
+                        print(f"[event] {label:16s} {event:10s} → {s['zone']}")
+                        if stored:   # only narrate "put away", not every ordinary timeout-to-missing
+                            _speak_queue.put(f"Your {label} was just stored {_zone_phrase(s['zone'])}.")
 
         # ── draw overlay ──────────────────────────────────────────────
         vis = frame.copy()
@@ -245,11 +341,32 @@ def resolve(q: str) -> str | None:
             return label
     return None
 
+def ask_gemini(q: str) -> str:
+    """Anything that isn't about a tracked object goes here instead."""
+    if not GEMINI_API_KEY:
+        return ("I'm not tracking that, and no Gemini key is set — "
+                "add GEMINI_API_KEY to .env for general questions.")
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
+    body = {
+        "contents": [{"parts": [{"text": q}]}],
+        "systemInstruction": {"parts": [{
+            "text": "You are viSion, a voice assistant. Answer in 1-3 short sentences "
+                    "suitable for being read aloud."
+        }]},
+    }
+    try:
+        r = requests.post(url, params={"key": GEMINI_API_KEY}, json=body, timeout=15)
+        r.raise_for_status()
+        return r.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
+    except Exception as e:
+        print(f"[gemini] error: {e}")
+        return "Sorry, I couldn't reach Gemini just now."
+
 def answer(q: str) -> dict:
     """Shared by /ask and the voice loop so both give identical responses."""
     label = resolve(q)
     if not label:
-        return {"say": "I'm not tracking that. Try asking about your keys, wallet, or phone.", "hit": None}
+        return {"say": ask_gemini(q), "hit": None}
 
     with _lock:
         s = _state.get(label)
@@ -258,11 +375,14 @@ def answer(q: str) -> dict:
 
     ago = _ago(s["seen_at"])
     if s["status"] == "present":
-        say = f"Your {label} is on the {s['zone']}."
+        say = f"Your {label} is {_zone_phrase(s['zone'])}."
+    elif s["status"] == "stored":
+        say = f"Your {label} is stored {_zone_phrase(s['zone'])} — put there {ago}."
     else:
-        say = f"I last saw your {label} on the {s['zone']}, {ago}."
+        say = f"I last saw your {label} {_zone_phrase(s['zone'])}, {ago}."
 
-    return {"say": say, "hit": {"label": label, **s, "ago": ago}}
+    return {"say": say, "hit": {"label": label, **s, "ago": ago,
+                                "container": _zone_base(s["zone"]) in CONTAINERS}}
 
 # ══════════════════════════════════════════════════════════════════════
 #  VOICE LOOP  (hands-free — server-side mic, wake word, TTS)
@@ -273,6 +393,47 @@ SILENCE_RMS  = 0.010        # below this = silence
 SILENCE_HANG = 8            # consecutive silent chunks that end an utterance
 MAX_UTTER_S  = 8            # hard cap on one utterance's length
 
+def _tts_loop():
+    """Owns the one pyttsx3 engine — everything that wants to talk (the
+    wake-word Q&A flow, ambient event narration) hands text to _speak_queue
+    instead of calling pyttsx3 directly, so only one utterance plays at a time.
+
+    pyttsx3's Linux driver plays audio via a bare `aplay file.wav` call with
+    no device flag, which fights PipeWire for the raw hardware PCM and fails
+    with "Device or resource busy". Route around it: synthesize to a file,
+    then play that file ourselves through sounddevice/PortAudio, which
+    already talks to PipeWire fine (same path the mic capture uses)."""
+    tts = pyttsx3.init()
+    tts.setProperty("rate", 175)
+    tmp_wav = f"/tmp/vision_tts_{os.getpid()}.wav"
+    try:
+        out_sr = int(sd.query_devices(kind="output")["default_samplerate"])
+    except Exception:
+        out_sr = 44100
+
+    while True:
+        text = _speak_queue.get()
+        with _lock:
+            _voice["say"] = text
+        _tts_busy.set()
+        try:
+            tts.save_to_file(text, tmp_wav)
+            tts.runAndWait()
+            with wave.open(tmp_wav, "rb") as wf:
+                sr, ch = wf.getframerate(), wf.getnchannels()
+                raw = wf.readframes(wf.getnframes())
+            data = np.frombuffer(raw, dtype=np.int16).astype(np.float32) / 32768.0
+            if ch > 1:
+                data = data.reshape(-1, ch)
+            if sr != out_sr:
+                data = resample(data, int(len(data) * out_sr / sr)).astype(np.float32)
+            sd.play(data, out_sr)
+            sd.wait()
+        except Exception as e:
+            print(f"[voice] tts error: {e}")
+        time.sleep(0.3)   # let room/speaker echo settle before the mic listens again
+        _tts_busy.clear()
+
 def _voice_loop():
     print(f"[voice] loading whisper ({WHISPER_MODEL}) …")
     try:
@@ -280,18 +441,6 @@ def _voice_loop():
     except Exception as e:
         print(f"[voice] could not load whisper, voice disabled: {e}")
         return
-
-    tts = pyttsx3.init()
-    tts.setProperty("rate", 175)
-
-    def speak(text: str):
-        with _lock:
-            _voice["say"] = text
-        try:
-            tts.say(text)
-            tts.runAndWait()
-        except Exception as e:
-            print(f"[voice] tts error: {e}")
 
     def transcribe(audio: np.ndarray) -> str:
         segments, _ = whisper.transcribe(audio, language="en", vad_filter=True)
@@ -301,7 +450,8 @@ def _voice_loop():
     audio_q: queue.Queue = queue.Queue()
 
     def callback(indata, frames, time_info, status):
-        audio_q.put(indata[:, 0].copy())
+        if not _tts_busy.is_set():   # ignore the mic while we're talking (no self-echo)
+            audio_q.put(indata[:, 0].copy())
 
     try:
         stream = sd.InputStream(samplerate=SAMPLE_RATE, channels=1, dtype="float32",
@@ -347,7 +497,7 @@ def _voice_loop():
                     with _lock: _voice["listening"] = False
                     d = answer(text)
                     with _lock: _voice["hit"] = d["hit"]
-                    speak(d["say"])
+                    _speak_queue.put(d["say"])
                 else:
                     phrase = next((w for w in WAKE_PHRASES if w in text), None)
                     if not phrase:
@@ -356,15 +506,11 @@ def _voice_loop():
                     if rest:
                         d = answer(rest)
                         with _lock: _voice["hit"] = d["hit"]
-                        speak(d["say"])
+                        _speak_queue.put(d["say"])
                     else:
                         awaiting_command = True
                         with _lock: _voice["listening"] = True
-                        speak("Yes?")
-
-                # Discard audio captured while we were speaking (avoid self-echo)
-                while not audio_q.empty():
-                    audio_q.get_nowait()
+                        _speak_queue.put("Yes?")
             except Exception as e:
                 print(f"[voice] loop error: {e}")
                 buf, speaking, silence_run = [], False, 0
@@ -375,6 +521,7 @@ def _voice_loop():
 @asynccontextmanager
 async def lifespan(app):
     threading.Thread(target=_vision_loop, daemon=True).start()
+    threading.Thread(target=_tts_loop, daemon=True).start()
     threading.Thread(target=_voice_loop, daemon=True).start()
     yield
 
@@ -429,7 +576,7 @@ HTML = """<!DOCTYPE html>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
   --bg:#DDE1D8;--bg2:#D2D7CB;--ink:#1A1F1C;--muted:#6B7268;
-  --rule:#B4BAAE;--green:#2F5D50;--red:#9E2B25;
+  --rule:#B4BAAE;--green:#2F5D50;--red:#9E2B25;--amber:#9E7B25;
 }
 body{
   background:var(--bg);color:var(--ink);
@@ -483,12 +630,13 @@ input:focus{outline:2px solid var(--green);outline-offset:-2px}
        padding:5px 9px;transform:rotate(4deg)}
 .stamp.present{color:var(--green);border-color:var(--green)}
 .stamp.missing{color:var(--red);border-color:var(--red)}
+.stamp.stored{color:var(--amber);border-color:var(--amber)}
 table{width:100%;border-collapse:collapse;margin-top:6px}
 th{font:500 9px/1 "Archivo",sans-serif;letter-spacing:.16em;text-transform:uppercase;
    color:var(--muted);text-align:left;padding:0 0 7px;border-bottom:1px solid var(--ink)}
 td{padding:8px 0;border-bottom:1px solid var(--rule);font-size:12px;vertical-align:middle}
 .dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:7px;vertical-align:1px}
-.dot.present{background:var(--green)} .dot.missing{background:var(--red)}
+.dot.present{background:var(--green)} .dot.missing{background:var(--red)} .dot.stored{background:var(--amber)}
 .empty{color:var(--muted);padding:18px 0;font-size:12px}
 .log{margin-top:22px}
 .log li{list-style:none;display:flex;gap:10px;font-size:11px;
@@ -543,17 +691,27 @@ function speak(t){
     speechSynthesis.speak(u);}catch(e){}
 }
 
+function whereText(h){
+  const prep = h.container ? 'in' : 'on';
+  if(h.status==='present') return prep+' the';
+  if(h.status==='stored')  return 'stored '+prep+' the';
+  return 'last '+prep+' the';
+}
+function stampText(status){
+  return status==='present' ? 'On record' : status==='stored' ? 'Stored away' : 'Missing';
+}
+
 function renderReceipt(say, hit){
   const box=$('#receipt');
   if(!hit){box.innerHTML='<div class="idle">'+say+'</div>';return;}
   const h=hit;
   box.innerHTML=`
-    <div class="stamp ${h.status}">${h.status==='present'?'On record':'Missing'}</div>
+    <div class="stamp ${h.status}">${stampText(h.status)}</div>
     <div class="rec-top">
       <figure class="polaroid"><img src="/crops/${h.crop}" alt="crop"></figure>
       <div class="rec-body">
         <h2>${h.label}</h2>
-        <div class="where">${h.status==='present'?'on the':'last on the'} <b>${h.zone}</b></div>
+        <div class="where">${whereText(h)} <b>${h.zone}</b></div>
         <div class="ts">${hhmm(h.seen_at)} · ${h.ago} · ${h.conf} conf</div>
       </div>
     </div>`;
