@@ -14,16 +14,15 @@ An ambient AI assistant designed to track the location of your everyday objects,
 
 ## The Concept: Object Permanence
 
-viSion tracks onject position changes. For example: "Keys appeared at 14:32 on the counter" / "keys disappeared at 14:35".
+viSion tracks object position changes. For example: "Keys appeared at 14:32 on the counter" / "keys disappeared at 14:35".
 Locations are spoken relative to labeled zones such as "desk", couch", etc.
 
 ## Models
 
 - **Detection:** YOLO
-- **Descriptions/Queries:** Moondream2 or Qwen2-VL-2B locally (Claude/GPT-4o via API for low-latency budget)
 - **STT:** `faster-whisper`
 - **TTS:** Piper
-- **Wake word:** `hey viSion`, `vision`, etc.(it says etc. as it is adaptive)
+- **Wake word:** `hey viSion`, `vision`, etc. for vision and `hey whisper`, `whisper`, etc. for simple general queries(it says etc. as it is adaptive).
 
 ## Privacy
 
