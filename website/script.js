@@ -26,12 +26,15 @@ document.addEventListener('DOMContentLoaded', () => {
         heroTitle.style.opacity = '1';
         loader.style.display = 'none';
         heroContent.classList.add('visible');
-        typePreHeroText();
       }, 1000); // This should match the transition duration in CSS
     }, 1000);
   }, 1000);
 
+  let animationStarted = false;
   const typePreHeroText = () => {
+    if (animationStarted) return;
+    animationStarted = true;
+
     const preHeroTextEl = document.getElementById('pre-hero-text');
     const text = "Hey! I'm still here!";
     let charIndex = 0;
@@ -46,6 +49,13 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }, 100);
   };
+
+  document.addEventListener('keydown', (event) => {
+    if (event.code === 'Space') {
+      event.preventDefault();
+      typePreHeroText();
+    }
+  });
 
   // Theme Switcher
   const themeSwitch = document.getElementById('checkbox');
