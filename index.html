@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Joule Dashboard</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #1e1e2e;
+            color: #cdd6f4;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        h1 {
+            color: #89b4fa;
+            margin-bottom: 20px;
+        }
+        .container {
+            display: flex;
+            gap: 20px;
+            width: 100%;
+            max-width: 1200px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        .card {
+            background-color: #181825;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            flex: 1;
+            min-width: 450px;
+        }
+        .video-box {
+            width: 100%;
+            height: 350px;
+            background-color: #313244;
+            border-radius: 8px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+        }
+        .video-box img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        #joule-display {
+            background-color: #313244;
+            padding: 15px;
+            border-radius: 8px;
+            min-height: 150px;
+            font-family: 'Courier New', Courier, monospace;
+            white-space: pre-wrap;
+            border-left: 4px solid #a6e3a1;
+        }
+        .status {
+            font-size: 0.9em;
+            color: #a6adc8;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>JOULE AI SMART DASHBOARD</h1>
+
+    <div class="container">
+        <div class="card">
+            <h2>Live Feed (IP Webcam)</h2>
+            <div class="video-box">
+                <img id="camera-feed" src="http://192.168.1.100:8080/video" alt="Awaiting video stream connection...">
+            </div>
+            <div class="status">Source: Local WiFi IP Stream</div>
+        </div>
+
+        <div class="card">
+            <h2>Joule Analysis</h2>
+            <div id="joule-display">Awaiting initial VTT prompt stream...</div>
+            <div class="status" id="connection-status">Connecting to Backend Core Server...</div>
+        </div>
+    </div>
+
+    <script>
+        // Continuous polling setup: pulls live updates from port 5000 every 1.5 seconds
+        setInterval(async () => {
+            try {
+                const response = await fetch('http://127.0.0.1:5000/api/joule_stream');
+                if (response.ok) {
+                    const data = await response.json();
+                    document.getElementById('joule-display').innerText = data.response;
+                    document.getElementById('connection-status').innerText = "Status: Connected to Core API Server";
+                    document.getElementById('connection-status').style.color = "#a6e3a1";
+                }
+            } catch (error) {
+                document.getElementById('connection-status').innerText = "Status: Disconnected. Is gemini_server.py running?";
+                document.getElementById('connection-status').style.color = "#f38ba8";
+            }
+        }, 1500);
+    </script>
+</body>
+</html>
