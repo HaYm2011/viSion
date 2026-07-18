@@ -36,6 +36,7 @@ document.addEventListener('DOMContentLoaded', () => {
     animationStarted = true;
 
     const preHeroTextEl = document.getElementById('pre-hero-text');
+    preHeroTextEl.classList.add('typing');
     const text = "Hey! I'm still here!";
     let charIndex = 0;
     preHeroTextEl.textContent = '';
@@ -46,6 +47,7 @@ document.addEventListener('DOMContentLoaded', () => {
         charIndex++;
       } else {
         clearInterval(typingInterval);
+        preHeroTextEl.classList.remove('typing');
       }
     }, 100);
   };

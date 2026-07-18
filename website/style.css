@@ -556,6 +556,10 @@ footer {
     opacity: 0;
 }
 
+#pre-hero-text.typing::after {
+    opacity: 1;
+}
+
 .abstract-shape {
     position: absolute;
     border-radius: 50%;
