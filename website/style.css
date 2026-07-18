@@ -544,8 +544,8 @@ footer {
 
 #pre-hero-text {
     color: var(--text-main);
-    font-size: 1.5rem;
-    letter-spacing: 1.5px;
+    font-size: 3rem;
+    letter-spacing: 3px;
 }
 
 #pre-hero-text::after {
