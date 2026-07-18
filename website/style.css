@@ -542,6 +542,12 @@ footer {
     opacity: 0;
 }
 
+#pre-hero-text {
+    color: var(--text-main);
+    font-size: 1.5rem;
+    letter-spacing: 1.5px;
+}
+
 #pre-hero-text::after {
     content: '▋';
     display: inline-block;
